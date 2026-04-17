@@ -10,7 +10,7 @@ import random
 from chaos import chaos_config
 
 # --- Configuration ---
-SERVER_IP = "127.0.0.1"
+SERVER_IP = "0.0.0.0"
 SERVER_PORT = 5000
 BUFFER_SIZE = 4096  # Larger than 1024 to accommodate headers
 MAX_RETRIES = 10    # Safety valve for zombie threads

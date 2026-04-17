@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend      # Points to the new folder
+      dockerfile: Dockerfile  # Uses the renamed file
+    ports:
+      - "8000:8000"
+      - "5000:5000/udp"
+    networks:
+      - arq_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - arq_network
+
+networks:
+  arq_network:
+    driver: bridge

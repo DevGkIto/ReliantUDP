@@ -1,8 +1,17 @@
-# Python bytecode
+# Python
 __pycache__/
 *.py[cod]
-
-# Virtual environments
+*$py.class
 .venv/
 venv/
 env/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
+
+# OS / Environment
+.DS_Store
+.env
