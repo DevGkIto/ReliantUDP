@@ -12,6 +12,3 @@ node_modules/
 out/
 build/
 
-# OS / Environment
-.DS_Store
-.env

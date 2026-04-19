@@ -4,11 +4,31 @@ import { useTelemetry } from "./hooks/useTelemetry";
 import { useState } from "react";
 
 export default function Dashboard() {
-  // Notice we are pulling 'metrics' out of the hook now!
-  const { events, isConnected, packetState, metrics } = useTelemetry("ws://localhost:8000/api/ws", 100);
+  // 1. Session state controls the connection
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [chaos, setChaos] = useState(0);
 
-  // Send the new chaos rate to the FastAPI bridge
+  // 2. Pass the sessionId instead of the hardcoded URL
+  const { events, isConnected, packetState, metrics } = useTelemetry(sessionId, 100);
+
+  // 3. The Orchestrator Function
+  const handleStartTransfer = async () => {
+    // Generate a fresh UUID natively in the browser
+    const newSessionId = crypto.randomUUID();
+    setSessionId(newSessionId);
+
+    try {
+      // Command the backend background task to begin the UDP transfer
+      await fetch("http://localhost:8000/api/start-transfer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: newSessionId }),
+      });
+    } catch (e) {
+      console.error("Failed to start transfer", e);
+    }
+  };
+
   const updateChaos = async (rate: number) => {
     setChaos(rate);
     try {
@@ -22,7 +42,6 @@ export default function Dashboard() {
     }
   };
 
-  // Helper to color the grid squares
   const getStatusColor = (status: string) => {
     if (status === 'acked') return 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]';
     if (status === 'lost') return 'bg-red-500 animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.8)]';
@@ -30,7 +49,6 @@ export default function Dashboard() {
     return 'bg-neutral-800';
   };
 
-  // Get the highest sequence number to size our grid
   const maxSeq = Math.max(0, ...Object.keys(packetState).map(Number));
   const gridBlocks = Array.from({ length: maxSeq + 1 }, (_, i) => i);
 
@@ -38,9 +56,23 @@ export default function Dashboard() {
     <main className="min-h-screen bg-neutral-950 text-neutral-200 p-8 font-mono">
       <div className="max-w-6xl mx-auto space-y-6">
         
-        {/* Top Bar */}
+        {/* Top Bar with Orchestration Controls */}
         <div className="flex justify-between items-center border-b border-green-900/50 pb-4">
-          <h1 className="text-2xl font-bold text-green-400 tracking-wider">ARQ TELEMETRY DASHBOARD</h1>
+          <div className="flex items-center gap-6">
+            <h1 className="text-2xl font-bold text-green-400 tracking-wider">ARQ TELEMETRY DASHBOARD</h1>
+            <button 
+              onClick={handleStartTransfer}
+              className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded transition-colors text-sm shadow-[0_0_10px_rgba(34,197,94,0.3)] active:scale-95"
+            >
+              START TRANSFER
+            </button>
+            {sessionId && (
+              <span className="text-xs text-neutral-500 bg-neutral-900 py-1 px-2 rounded border border-neutral-800">
+                Session: {sessionId.split('-')[0]}
+              </span>
+            )}
+          </div>
+          
           <div className="flex items-center gap-2">
             <div className={`w-3 h-3 rounded-full ${isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"}`}></div>
             <span className="text-sm font-bold text-green-400">{isConnected ? "LIVE" : "OFFLINE"}</span>
@@ -132,7 +164,7 @@ export default function Dashboard() {
                 ))}
                 {gridBlocks.length === 0 && (
                   <div className="w-full text-center mt-20 text-neutral-600 animate-pulse">
-                    Waiting for transfer to begin...
+                    Click "START TRANSFER" to initiate file transfer sequence...
                   </div>
                 )}
               </div>

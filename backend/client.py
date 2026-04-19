@@ -5,7 +5,6 @@ from protocol import *
 SERVER_IP = "127.0.0.1"
 SERVER_PORT = 5000
 TARGET_FILE = "test.txt"
-# LOSS_CHANCE removed! We want a purely deterministic receiver.
 MAX_RETRIES = 5
 
 def request_file_transfer(server_ip, server_port, filename, max_retries=5):
@@ -25,7 +24,7 @@ def request_file_transfer(server_ip, server_port, filename, max_retries=5):
     
     return None, None, client_socket
 
-def process_download(initial_response, server_address, client_socket, filename):
+def process_download(initial_response, server_address, client_socket, filename, session_id):
     """Phase 2: Reliable Data Reception (Dumb, Fast, Predictable)"""
     expected_sequence = 0
     current_packet = initial_response # The "Baton"
@@ -70,21 +69,24 @@ def process_download(initial_response, server_address, client_socket, filename):
 
             current_packet = None
 
-if __name__ == "__main__":
-    print("--- UTFPR Reliable UDP Client (Telemetry Mode) ---")
+def run_udp_transfer(session_id: str, target_file: str = "test.txt"):
+    """
+    Entrypoint for the API to trigger a native in-memory UDP transfer.
+    """
+    print(f"--- UTFPR Reliable UDP Client (Session: {session_id}) ---")
     
     try:
-        init_pkt, srv_addr, sock = request_file_transfer(SERVER_IP, SERVER_PORT, TARGET_FILE)
+        init_pkt, srv_addr, sock = request_file_transfer(SERVER_IP, SERVER_PORT, target_file)
         
         if init_pkt:
             p_type, _, _, data = unpack_p(init_pkt)
             if p_type == TYPE_ERROR:
                 print(f"[-] SERVER ERROR: {data.decode()}")
             else:
-                process_download(init_pkt, srv_addr, sock, TARGET_FILE)
+                process_download(init_pkt, srv_addr, sock, target_file, session_id)
         
         sock.close()
     except Exception as e:
-        print(f"[-] Error: {e}")
+        print(f"[-] Error in session {session_id}: {e}")
     finally:
-        print("[*] Client shutdown.")
+        print(f"[*] Session {session_id} shutdown.")

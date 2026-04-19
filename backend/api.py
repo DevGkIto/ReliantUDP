@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks # <-- Added BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import threading
@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from server import start_udp_server
 from chaos import chaos_config
 from event_queue import telemetry_queue
+from client import run_udp_transfer # <-- NEW: Import our refactored client
 
 # --- 1. THE WEBSOCKET MANAGER ---
 class ConnectionManager:
@@ -46,7 +47,7 @@ async def bridge_telemetry_queues():
             await asyncio.sleep(0.01)
 # ---------------------------
 
-# --- 3. LIFESPAN (Defined BEFORE the app uses it) ---
+# --- 3. LIFESPAN ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     udp_thread = threading.Thread(target=start_udp_server, daemon=True)
@@ -90,6 +91,25 @@ class ChaosUpdateRequest(BaseModel):
 async def update_chaos(req: ChaosUpdateRequest):
     chaos_config.set_drop_rate(req.drop_rate)
     return {"status": "success", "new_drop_rate": chaos_config.get_drop_rate()}
+
+# --- NEW: STEP B START TRANSFER ENDPOINT ---
+class StartTransferRequest(BaseModel):
+    session_id: str
+
+@app.post("/api/start-transfer")
+async def start_transfer(req: StartTransferRequest, background_tasks: BackgroundTasks):
+    """
+    SaaS UX: The frontend commands the backend to start the UDP transfer
+    natively in memory without blocking the API response.
+    """
+    # Fire and forget: Runs the UDP client loop in a background thread managed by FastAPI
+    background_tasks.add_task(run_udp_transfer, req.session_id)
+    
+    return {
+        "status": "success", 
+        "message": f"UDP transfer pipeline initiated for session {req.session_id}"
+    }
+# -------------------------------------------
 
 @app.get("/api/health")
 async def health_check():

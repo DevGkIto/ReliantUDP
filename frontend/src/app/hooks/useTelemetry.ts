@@ -19,18 +19,27 @@ export interface Metrics {
   retransmits: number;
 }
 
-export function useTelemetry(url: string, maxEvents: number = 100) {
+// Changed 'url' string to 'sessionId'. The hook now manages the URL string internally.
+export function useTelemetry(sessionId: string | null, maxEvents: number = 100) {
   const [events, setEvents] = useState<TelemetryEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [packetState, setPacketState] = useState<Record<number, PacketStatus>>({});
-  
-  // NEW: Running totals
   const [metrics, setMetrics] = useState<Metrics>({ totalBytesAcked: 0, packetsLost: 0, retransmits: 0 });
   
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const ws = new WebSocket(url);
+    // SaaS UX: Do not connect until the UI generates a session ID
+    if (!sessionId) return;
+
+    // Reset board for a new transfer
+    setEvents([]);
+    setPacketState({});
+    setMetrics({ totalBytesAcked: 0, packetsLost: 0, retransmits: 0 });
+
+    // Connect using the specific session_id room
+    const wsUrl = `ws://localhost:8000/api/ws?session_id=${sessionId}`;
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => setIsConnected(true);
@@ -42,7 +51,6 @@ export function useTelemetry(url: string, maxEvents: number = 100) {
         
         setEvents((prev) => [data, ...prev].slice(0, maxEvents));
 
-        // Update running metrics
         setMetrics((prev) => {
           const newMetrics = { ...prev };
           
@@ -54,13 +62,11 @@ export function useTelemetry(url: string, maxEvents: number = 100) {
             newMetrics.totalBytesAcked += data.size_bytes;
           }
           
-          // THE FIX: A retransmit implies a packet was lost/timed out!
           if (data.event === 'retransmit') {
             newMetrics.packetsLost += 1;
             newMetrics.retransmits += 1;
           }
           
-          // Keep this just in case the server completely aborts
           if (data.event === 'packet_timeout') {
             newMetrics.packetsLost += 1; 
           }
@@ -88,7 +94,7 @@ export function useTelemetry(url: string, maxEvents: number = 100) {
     };
 
     return () => ws.close();
-  }, [url, maxEvents]);
+  }, [sessionId, maxEvents]);
 
   return { events, isConnected, packetState, metrics };
 }
