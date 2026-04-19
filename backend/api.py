@@ -1,6 +1,9 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks # <-- Added BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi import HTTPException
 from contextlib import asynccontextmanager
+import os
 import threading
 import asyncio
 import queue
@@ -9,7 +12,7 @@ from pydantic import BaseModel
 from server import start_udp_server
 from chaos import chaos_config
 from event_queue import telemetry_queue
-from client import run_udp_transfer # <-- NEW: Import our refactored client
+from client import run_udp_transfer 
 
 # --- 1. THE WEBSOCKET MANAGER ---
 class ConnectionManager:
@@ -92,7 +95,6 @@ async def update_chaos(req: ChaosUpdateRequest):
     chaos_config.set_drop_rate(req.drop_rate)
     return {"status": "success", "new_drop_rate": chaos_config.get_drop_rate()}
 
-# --- NEW: STEP B START TRANSFER ENDPOINT ---
 class StartTransferRequest(BaseModel):
     session_id: str
 
@@ -102,15 +104,32 @@ async def start_transfer(req: StartTransferRequest, background_tasks: Background
     SaaS UX: The frontend commands the backend to start the UDP transfer
     natively in memory without blocking the API response.
     """
-    # Fire and forget: Runs the UDP client loop in a background thread managed by FastAPI
     background_tasks.add_task(run_udp_transfer, req.session_id)
     
     return {
         "status": "success", 
         "message": f"UDP transfer pipeline initiated for session {req.session_id}"
     }
-# -------------------------------------------
 
-@app.get("/api/health")
-async def health_check():
-    return {"status": "online", "current_drop_rate": chaos_config.get_drop_rate()}
+
+@app.get("/api/download/{session_id}")
+async def download_file(session_id: str):
+    """
+    Allows the browser to securely download the file using an absolute path.
+    """
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(base_dir, f"received_{session_id}_test.txt")
+    
+    print(f"[*] API Download requested. Looking for: {file_path}")
+    
+    if not os.path.exists(file_path):
+
+        print(f"[-] File not found! Files currently in {base_dir}: {os.listdir(base_dir)}")
+        raise HTTPException(status_code=404, detail="File not found. Transfer may not be complete.")
+    
+    return FileResponse(
+        path=file_path, 
+        filename=f"telemetry_payload_{session_id[:8]}.txt", # Suggested filename when saving
+        media_type='text/plain'
+    )

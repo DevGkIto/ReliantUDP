@@ -1,4 +1,5 @@
 import socket
+import os
 from protocol import *
 
 # --- Static Configuration ---
@@ -27,15 +28,18 @@ def request_file_transfer(server_ip, server_port, filename, max_retries=5):
 def process_download(initial_response, server_address, client_socket, filename, session_id):
     """Phase 2: Reliable Data Reception (Dumb, Fast, Predictable)"""
     expected_sequence = 0
-    current_packet = initial_response # The "Baton"
+    current_packet = initial_response 
     client_socket.settimeout(5.0)
-    output_filename = f"received_{filename}"
+   
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    output_filename = os.path.join(base_dir, f"received_{session_id}_{filename}")
 
-    print(f"[*] Connection established. Acting as a fast, reliable receiver.")
+    print(f"[*] Connection established for Session {session_id}.")
+    print(f"[*] Saving file to: {output_filename}")
 
     with open(output_filename, "wb") as f:
         while True:
-            # If baton is empty, wait for next packet
+
             if current_packet is None:
                 try:
                     current_packet, _ = client_socket.recvfrom(2048)
@@ -51,13 +55,13 @@ def process_download(initial_response, server_address, client_socket, filename, 
                 print(f"[!] Corruption in segment {seq}. Discarding.")
             else:
                 if seq == expected_sequence:
-                    if payload: # Data chunk
+                    if payload: 
                         f.write(payload)
                         print(f"[+] Saved segment {seq}")
                         ack = pack_p(TYPE_ACK, seq, calculate_md5(b""), b"")
                         client_socket.sendto(ack, server_address)
                         expected_sequence += 1
-                    else: # EOF
+                    else: 
                         print("[*] EOF reached. Download successful!")
                         ack = pack_p(TYPE_ACK, seq, calculate_md5(b""), b"")
                         client_socket.sendto(ack, server_address)
@@ -73,7 +77,7 @@ def run_udp_transfer(session_id: str, target_file: str = "test.txt"):
     """
     Entrypoint for the API to trigger a native in-memory UDP transfer.
     """
-    print(f"--- UTFPR Reliable UDP Client (Session: {session_id}) ---")
+    print(f"--- UDP Client (Session: {session_id}) ---")
     
     try:
         init_pkt, srv_addr, sock = request_file_transfer(SERVER_IP, SERVER_PORT, target_file)

@@ -2,7 +2,7 @@ import string
 import random
 
 FILENAME = "test.txt"
-SIZE_KB = 100  # Set your target here in KB
+SIZE_KB = 100  
 
 def generate_file(filename, size_kb):
     size_bytes = int(size_kb * 1024)
@@ -11,7 +11,6 @@ def generate_file(filename, size_kb):
     print(f"[*] Generating {size_kb}KB test file ({size_bytes} bytes)...")
     
     with open(filename, 'w') as f:
-        # We generate the whole chunk at once since 100KB is tiny for RAM
         content = ''.join(random.choices(chars, k=size_bytes))
         f.write(content)
             

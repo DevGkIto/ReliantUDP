@@ -12,11 +12,9 @@ from chaos import chaos_config
 # --- Configuration ---
 SERVER_IP = "0.0.0.0"
 SERVER_PORT = 5000
-BUFFER_SIZE = 4096  # Larger than 1024 to accommodate headers
+BUFFER_SIZE = 4096 
 MAX_RETRIES = 10    # Safety valve for zombie threads
 
-# Global dictionary to route ACKs to the correct thread
-# Format: { (ip, port): queue.Queue() }
 active_transfers = {}
 dict_lock = threading.Lock()
 
@@ -30,7 +28,6 @@ def stdout_telemetry_consumer():
     print("[*] Telemetry stdout consumer started.")
     while True:
         event = telemetry_queue.get()
-        # Using the awesome to_json() method you wrote!
         print(f"TELEMETRY: {event.to_json()}") 
         telemetry_queue.task_done()
 
@@ -54,20 +51,15 @@ def handle_file_transfer(filename, client_address, packet_queue):
                 chunk = f.read(1024)
                 is_eof = not chunk
                 
-                # Create the packet
                 data_packet = pack_p(TYPE_DATA, current_sequence, calculate_md5(chunk), chunk)
                 
-                # --- STOP-AND-WAIT RETRANSMISSION LOOP ---
                 retries = 0
                 while True:
 
                     current_drop_rate = chaos_config.get_drop_rate()
                     if current_drop_rate > 0 and random.randint(1, 100) <= current_drop_rate:
                         print(f"[!] CHAOS: Dropping packet {current_sequence} intentionally.")
-                        # We don't send to the socket, but we STILL emit the telemetry 
-                        # so the UI knows we *tried* to send it (and it got lost in the void).
                     else:
-                        # The normal path
                         server_socket.sendto(data_packet, client_address)
 
                     telemetry_queue.put(TelemetryEvent(
@@ -79,7 +71,6 @@ def handle_file_transfer(filename, client_address, packet_queue):
                                         attempt = retries + 1 ))
                     
                     try:
-                        # Wait for the ACK from the Main Thread's dispatcher
                         ack_buffer = packet_queue.get(timeout=1.0)
                         p_type, ack_seq, _, _ = unpack_p(ack_buffer)
                         
@@ -92,7 +83,7 @@ def handle_file_transfer(filename, client_address, packet_queue):
                                                 checksum = calculate_md5(chunk),
                                                 attempt = retries + 1 ))
                             current_sequence += 1
-                            break # Success! Move to next chunk
+                            break 
                         else:
                             print(f"[?] Unexpected ACK {ack_seq} for {client_address}")
                     
