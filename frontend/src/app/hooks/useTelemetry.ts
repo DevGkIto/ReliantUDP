@@ -11,7 +11,7 @@ export interface TelemetryEvent {
   rtt_ms: number | null;
 }
 
-export type PacketStatus = "sent" | "lost" | "acked";
+export type PacketStatus = "sent" | "lost" | "retransmitting" | "acked" | "recovered";
 
 export interface Metrics {
   totalBytesAcked: number;
@@ -39,12 +39,10 @@ export function useTelemetry(
   useEffect(() => {
     if (!sessionId) return;
 
-    // Reset board for a new transfer
     setEvents([]);
     setPacketState({});
     setMetrics({ totalBytesAcked: 0, packetsLost: 0, retransmits: 0 });
 
-    // Connect using the specific session_id room
     const wsUrl = `ws://localhost:8000/api/ws?session_id=${sessionId}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -74,7 +72,6 @@ export function useTelemetry(
           }
 
           if (data.event === "retransmit") {
-            newMetrics.packetsLost += 1;
             newMetrics.retransmits += 1;
           }
 
@@ -87,26 +84,18 @@ export function useTelemetry(
 
         setPacketState((prev) => {
           const newState = { ...prev };
-          if (
-            data.seq === 0 &&
-            data.event === "packet_sent" &&
-            data.attempt === 1
-          ) {
-            return { 0: "sent" };
-          }
+          
           if (data.seq === -1) return prev;
 
-          if (data.event === "ack_received") newState[data.seq] = "acked";
-          else if (
-            data.event === "packet_timeout" ||
-            data.event === "retransmit"
-          )
+          if (data.event === "ack_received") {
+            newState[data.seq] = (data.attempt && data.attempt > 1) ? "recovered" : "acked";
+          } 
+          else if (data.event === "packet_timeout") {
             newState[data.seq] = "lost";
-          else if (
-            data.event === "packet_sent" &&
-            newState[data.seq] !== "acked"
-          )
-            newState[data.seq] = "sent";
+          } 
+          else if (data.event === "retransmit") {
+            newState[data.seq] = "retransmitting";
+          }
 
           return newState;
         });

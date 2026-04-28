@@ -4,24 +4,21 @@ import { useTelemetry } from "./hooks/useTelemetry";
 import { useState } from "react";
 
 export default function Dashboard() {
-  // 1. Session state controls the connection
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [chaos, setChaos] = useState(0);
+  const [clearOffset, setClearOffset] = useState(0);
 
-  // 2. Pass the sessionId instead of the hardcoded URL
   const { events, isConnected, packetState, metrics } = useTelemetry(
     sessionId,
     100,
   );
 
-  // 3. The Orchestrator Function
   const handleStartTransfer = async () => {
-    // Generate a fresh UUID natively in the browser
     const newSessionId = crypto.randomUUID();
     setSessionId(newSessionId);
+    setClearOffset(0);
 
     try {
-      // Command the backend background task to begin the UDP transfer
       await fetch("http://localhost:8000/api/start-transfer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -35,7 +32,6 @@ export default function Dashboard() {
   const handleSaveFile = () => {
     if (!sessionId) return;
 
-    // We create a temporary, invisible <a> tag to trigger the browsers native download behavior
     const url = `http://localhost:8000/api/download/${sessionId}`;
     const a = document.createElement("a");
     a.href = url;
@@ -58,23 +54,33 @@ export default function Dashboard() {
     }
   };
 
+  const handleClearMatrix = () => {
+    const currentMax = Math.max(0, ...Object.keys(packetState).map(Number));
+    setClearOffset(currentMax + 1);
+  };
+
   const getStatusColor = (status: string) => {
     if (status === "acked")
-      return "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]";
+      return "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]";
+    if (status === "recovered")
+      return "bg-green-500 border-2 border-red-500 box-border shadow-[0_0_10px_rgba(239,68,68,0.8)]";
     if (status === "lost")
-      return "bg-red-500 animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.8)]";
-    if (status === "sent")
-      return "bg-yellow-500 shadow-[0_0_5px_rgba(234,179,8,0.5)]";
+      return "bg-red-500 scale-150 z-10 relative animate-pulse shadow-[0_0_15px_rgba(239,68,68,1)]";
+    if (status === "retransmitting")
+      return "bg-yellow-500 scale-125 z-10 relative animate-pulse shadow-[0_0_15px_rgba(234,179,8,1)]";
+
     return "bg-neutral-800";
   };
 
   const maxSeq = Math.max(0, ...Object.keys(packetState).map(Number));
-  const gridBlocks = Array.from({ length: maxSeq + 1 }, (_, i) => i);
+  const gridBlocks = [];
+  for (let i = clearOffset; i <= maxSeq; i++) {
+    gridBlocks.push(i);
+  }
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-200 p-8 font-mono">
       <div className="max-w-6xl mx-auto space-y-6">
-        {/* Top Bar with Orchestration Controls */}
         <div className="flex justify-between items-center border-b border-green-900/50 pb-4">
           <div className="flex items-center gap-6">
             <h1 className="text-2xl font-bold text-green-400 tracking-wider">
@@ -125,7 +131,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Analytics Row */}
         <div className="grid grid-cols-3 gap-6">
           <div className="bg-neutral-900 border border-neutral-800 p-4 rounded shadow-lg">
             <h3 className="text-neutral-500 text-xs font-bold mb-1">
@@ -156,11 +161,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Dashboard Grid Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* LEFT COLUMN: Controls & Log */}
           <div className="space-y-6 flex flex-col h-[60vh]">
-            {/* Chaos Controller */}
             <div className="bg-neutral-900 border border-neutral-800 p-6 rounded shadow-lg">
               <div className="flex justify-between mb-4">
                 <h2 className="text-neutral-400 font-bold text-sm">
@@ -186,7 +188,6 @@ export default function Dashboard() {
               />
             </div>
 
-            {/* Event Log */}
             <div className="bg-neutral-900 border border-neutral-800 p-4 rounded shadow-lg flex-grow flex flex-col overflow-hidden">
               <h2 className="text-neutral-400 font-bold mb-4 border-b border-neutral-800 pb-2 flex justify-between text-sm">
                 <span>EVENT STREAM</span>
@@ -220,17 +221,22 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* RIGHT COLUMN: The Visual Grid */}
           <div className="lg:col-span-2 bg-neutral-900 border border-neutral-800 p-6 rounded shadow-lg h-[60vh] flex flex-col">
             <h2 className="text-neutral-400 font-bold mb-4 border-b border-neutral-800 pb-2 flex justify-between text-sm">
               <span>PACKET MATRIX</span>
+              <button
+                onClick={handleClearMatrix}
+                className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded transition-colors text-xs border border-neutral-700 active:scale-95"
+              >
+                Clear View
+              </button>
               <div className="flex gap-4 text-xs">
                 <span className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-yellow-500 rounded-sm"></div>{" "}
-                  In-Flight
+                  <div className="w-2 h-2 bg-red-500 rounded-sm"></div> Timeout
                 </span>
                 <span className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-red-500 rounded-sm"></div> Dropped
+                  <div className="w-2 h-2 bg-yellow-500 rounded-sm"></div>{" "}
+                  Retransmitting
                 </span>
                 <span className="flex items-center gap-1">
                   <div className="w-2 h-2 bg-green-500 rounded-sm"></div> ACKed

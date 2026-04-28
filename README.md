@@ -22,4 +22,4 @@ docker-compose up --build
 
 ## Execution Overview
 
-![Execution Overview](UDPtransfer.gif)
+![Execution Overview](reliableUDP.gif)

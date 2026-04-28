@@ -2,7 +2,7 @@ import string
 import random
 
 FILENAME = "test.txt"
-SIZE_KB = 100  
+SIZE_KB = 5000
 
 def generate_file(filename, size_kb):
     size_bytes = int(size_kb * 1024)

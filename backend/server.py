@@ -8,23 +8,23 @@ from telemetry import TelemetryEvent, EventType
 from event_queue import telemetry_queue
 import random
 from chaos import chaos_config
+import time
 
-# --- Configuration ---
 SERVER_IP = "0.0.0.0"
 SERVER_PORT = 5000
 BUFFER_SIZE = 4096 
-MAX_RETRIES = 10    # Safety valve for zombie threads
+MAX_RETRIES = 10   
 
 active_transfers = {}
 dict_lock = threading.Lock()
 
-chaos_config.set_drop_rate(10)
+chaos_config.set_drop_rate(0)
 
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server_socket.bind((SERVER_IP, SERVER_PORT))
 
 def stdout_telemetry_consumer():
-    """Phase 1 test consumer: Drains the queue and prints to stdout"""
+    """Consumidor de teste: Drena a fila de telemetria e imprime no terminal"""
     print("[*] Telemetry stdout consumer started.")
     while True:
         event = telemetry_queue.get()
@@ -32,8 +32,7 @@ def stdout_telemetry_consumer():
         telemetry_queue.task_done()
 
 def handle_file_transfer(filename, client_address, packet_queue):
-
-    """Worker thread: Handles one specific file transfer."""
+    """Worker thread: Responsável por gerenciar todo o ciclo de vida de uma única transferência."""
     print(f"[*] Thread started for {client_address} (File: {filename})")
 
     session_id = str(uuid.uuid4())
@@ -48,6 +47,7 @@ def handle_file_transfer(filename, client_address, packet_queue):
         with open(filename, "rb") as f:
             current_sequence = 0
             while True:
+
                 chunk = f.read(1024)
                 is_eof = not chunk
                 
@@ -55,7 +55,6 @@ def handle_file_transfer(filename, client_address, packet_queue):
                 
                 retries = 0
                 while True:
-
                     current_drop_rate = chaos_config.get_drop_rate()
                     if current_drop_rate > 0 and random.randint(1, 100) <= current_drop_rate:
                         print(f"[!] CHAOS: Dropping packet {current_sequence} intentionally.")
@@ -86,29 +85,34 @@ def handle_file_transfer(filename, client_address, packet_queue):
                             break 
                         else:
                             print(f"[?] Unexpected ACK {ack_seq} for {client_address}")
-                    
+                
                     except queue.Empty:
                         retries += 1
+                        
+                        telemetry_queue.put(TelemetryEvent(
+                            session_id = session_id,
+                            event = EventType.PACKET_TIMEOUT,
+                            seq = current_sequence,
+                            size_bytes = len(chunk),
+                            checksum = calculate_md5(chunk),
+                            attempt = retries 
+                        ))
+
                         if retries > MAX_RETRIES:
-                            telemetry_queue.put(TelemetryEvent(
-                                                session_id = session_id,
-                                                event = EventType.PACKET_TIMEOUT,
-                                                seq = current_sequence,
-                                                size_bytes = len(chunk),
-                                                checksum = calculate_md5(chunk),
-                                                attempt = retries + 1 ))
                             print(f"[-] ERROR: {client_address} timed out too many times. Aborting.")
                             return
+                        
+                        time.sleep(0.5)
 
                         telemetry_queue.put(TelemetryEvent(
-                                            session_id = session_id,
-                                            event = EventType.RETRANSMIT,
-                                            seq = current_sequence,
-                                            size_bytes = len(chunk),
-                                            checksum = calculate_md5(chunk),
-                                            attempt = retries + 1 ))
+                            session_id = session_id,
+                            event = EventType.RETRANSMIT,
+                            seq = current_sequence,
+                            size_bytes = len(chunk),
+                            checksum = calculate_md5(chunk),
+                            attempt = retries + 1 
+                        ))
                         print(f"[!] Timeout for {client_address}, seq {current_sequence}. Resending...")
-
                 if is_eof:
                     break
         
@@ -122,28 +126,29 @@ def handle_file_transfer(filename, client_address, packet_queue):
         print(f"[-] Error handling {client_address}: {e}")
     
     finally:
-
-        # Cleanup dictionary so we don't leak memory
         with dict_lock:
             if client_address in active_transfers:
                 del active_transfers[client_address]
         print(f"[*] Thread for {client_address} shut down.")
 
 def start_udp_server():
-    """Runs the main UDP dispatcher loop."""
+    """Loop principal (Dispatcher): Escuta a porta UDP e roteia pacotes."""
     print(f"[*] Threaded UDP Server ready at: {SERVER_IP}:{SERVER_PORT}")
     while True:
         try:
             raw_data, addr = server_socket.recvfrom(BUFFER_SIZE)
+            
             with dict_lock:
                 if addr in active_transfers:
                     active_transfers[addr].put(raw_data)
+                
                 else:
                     p_type, _, _, payload = unpack_p(raw_data)
                     if p_type == TYPE_REQ:
                         filename = payload.decode('utf-8')
                         client_q = queue.Queue()
                         active_transfers[addr] = client_q
+                        
                         t = threading.Thread(target=handle_file_transfer, args=(filename, addr, client_q))
                         t.daemon = True
                         t.start()

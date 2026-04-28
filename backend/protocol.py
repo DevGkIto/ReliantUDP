@@ -2,10 +2,10 @@ import struct
 import hashlib
 
 # --- Packet Types ---
-TYPE_REQ   = 0  # Client requesting a file
-TYPE_DATA  = 1  # Server sending data
-TYPE_ACK   = 2  # Client confirming receipt
-TYPE_ERROR = 3  # File not found or other errors
+TYPE_REQ   = 0  
+TYPE_DATA  = 1  
+TYPE_ACK   = 2  
+TYPE_ERROR = 3  
 
 # --- Format: Type (B), Sequence (I), Checksum (16s), Payload (Variable) ---
 # 'B' = unsigned char (1 byte)
