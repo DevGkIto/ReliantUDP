@@ -14,9 +14,9 @@ from chaos import chaos_config
 from event_queue import telemetry_queue
 from client import run_udp_transfer 
 
-# --- 1. GERENCIADOR DE WEBSOCKETS ---
+
 class ConnectionManager:
-    """Gerencia as conexões em tempo real ativas entre o backend e o frontend."""
+    """Manages active real-time connections between the backend and frontend."""
     def __init__(self):
         self.active_connections: list[WebSocket] = []
 
@@ -30,7 +30,7 @@ class ConnectionManager:
         print(f"[*] WS: Client disconnected. Total: {len(self.active_connections)}")
 
     async def broadcast(self, message: str):
-        """Dispara a mesma mensagem (evento de rede) para todos os dashboards conectados."""
+        """Broadcasts the same message (network event) to all connected dashboards."""
         for connection in self.active_connections:
             try:
                 await connection.send_text(message)
@@ -39,11 +39,11 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# --- 2. PONTE ASSÍNCRONA DE TELEMETRIA ---
+
 async def bridge_telemetry_queues():
     """
-    Conecta o mundo síncrono (threads UDP) com o mundo assíncrono (FastAPI).
-    Drena a fila de eventos do protocolo e os transmite para a UI via WebSocket.
+    Connects the synchronous world (UDP threads) with the asynchronous world (FastAPI).
+    Drains the protocol event queue and transmits events to the UI through WebSocket.
     """
     print("[*] API Bridge: Async telemetry drain started.")
     while True:
@@ -54,12 +54,12 @@ async def bridge_telemetry_queues():
         except queue.Empty:
             await asyncio.sleep(0.01)
 
-# --- 3. CICLO DE VIDA DA APLICAÇÃO (LIFESPAN) ---
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Orquestra o que acontece ao ligar e desligar a API.
-    Garante que o Servidor UDP e a Ponte de Telemetria rodem em background.
+    Orchestrates what happens when the API starts and shuts down.
+    Ensures the UDP Server and Telemetry Bridge run in the background.
     """
     udp_thread = threading.Thread(target=start_udp_server, daemon=True)
     udp_thread.start()
@@ -72,10 +72,9 @@ async def lifespan(app: FastAPI):
     bridge_task.cancel()
     print("[*] API Bridge: Shutting down.")
 
-# --- 4. INICIALIZAÇÃO DA API E CORS ---
+
 app = FastAPI(lifespan=lifespan)
 
-# Permite que o frontend (Next.js na porta 3000) faça requisições para esta API sem ser bloqueado pelo navegador.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"], 
@@ -84,10 +83,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- 5. ROTAS (ENDPOINTS) ---
+
 @app.websocket("/api/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """Endpoint onde o frontend se conecta para receber a telemetria ao vivo."""
+    """Endpoint where the frontend connects to receive live telemetry."""
     await manager.connect(websocket)
     try:
         while True:
@@ -100,7 +99,7 @@ class ChaosUpdateRequest(BaseModel):
 
 @app.patch("/api/chaos")
 async def update_chaos(req: ChaosUpdateRequest):
-    """Permite alterar dinamicamente a taxa de perda de pacotes (Chaos Injector)."""
+    """Allows dynamic updates to the packet loss rate (Chaos Injector)."""
     chaos_config.set_drop_rate(req.drop_rate)
     return {"status": "success", "new_drop_rate": chaos_config.get_drop_rate()}
 
@@ -111,7 +110,7 @@ class StartTransferRequest(BaseModel):
 async def start_transfer(req: StartTransferRequest):
     """
     We use a native Daemon Thread instead of BackgroundTasks.
-    This guarantees the OS will instantly kill the transfer if you hit CTRL+C.
+    This guarantees the OS will instantly terminate the transfer if CTRL+C is pressed.
     """
     client_thread = threading.Thread(
         target=run_udp_transfer, 
@@ -128,8 +127,8 @@ async def start_transfer(req: StartTransferRequest):
 @app.get("/api/download/{session_id}")
 async def download_file(session_id: str):
     """
-    Recupera o arquivo finalizado. 
-    Usa caminhos absolutos para evitar problemas de diretório dentro do container Docker.
+    Retrieves the completed file.
+    Uses absolute paths to avoid directory issues inside the Docker container.
     """
     base_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(base_dir, f"received_{session_id}_test.txt")
@@ -142,6 +141,6 @@ async def download_file(session_id: str):
     
     return FileResponse(
         path=file_path, 
-        filename=f"telemetry_payload_{session_id[:8]}.txt", # Nome limpo sugerido ao usuário na hora de salvar
+        filename=f"telemetry_payload_{session_id[:8]}.txt",
         media_type='text/plain'
     )

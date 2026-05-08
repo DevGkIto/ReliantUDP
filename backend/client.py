@@ -8,7 +8,7 @@ TARGET_FILE = "test.txt"
 MAX_RETRIES = 5
 
 def request_file_transfer(server_ip, server_port, filename, max_retries=5):
-    """Fase 1: Handshake. Envia a requisição inicial e aguarda a conexão."""
+    """Phase 1: Handshake. Sends the initial request and waits for the connection."""
     request_packet = pack_p(TYPE_REQ, 0, calculate_md5(b""), filename.encode("utf-8"))
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     
@@ -25,7 +25,7 @@ def request_file_transfer(server_ip, server_port, filename, max_retries=5):
     return None, None, client_socket
 
 def process_download(initial_response, server_address, client_socket, filename, session_id):
-    """Fase 2: Recepção de Dados. Stop-and-Wait garantindo ordem e integridade."""
+    """Phase 2: Data Reception. Stop-and-Wait ensuring order and integrity."""
     expected_sequence = 0
     current_packet = initial_response 
     client_socket.settimeout(5.0)
@@ -73,8 +73,8 @@ def process_download(initial_response, server_address, client_socket, filename, 
 
 def run_udp_transfer(session_id: str, target_file: str = "test.txt"):
     """
-    Ponto de entrada (Entrypoint) para a API disparar a transferência 
-    de forma nativa na memória, sem precisar rodar um script bash.
+    Entrypoint for the API to trigger the transfer
+    natively in memory, without needing to run a bash script.
     """
     print(f"--- UDP Client (Session: {session_id}) ---")
     

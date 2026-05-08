@@ -24,7 +24,7 @@ server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server_socket.bind((SERVER_IP, SERVER_PORT))
 
 def stdout_telemetry_consumer():
-    """Consumidor de teste: Drena a fila de telemetria e imprime no terminal"""
+    """Test consumer: Drains the telemetry queue and prints to the terminal."""
     print("[*] Telemetry stdout consumer started.")
     while True:
         event = telemetry_queue.get()
@@ -32,7 +32,7 @@ def stdout_telemetry_consumer():
         telemetry_queue.task_done()
 
 def handle_file_transfer(filename, client_address, packet_queue):
-    """Worker thread: Responsável por gerenciar todo o ciclo de vida de uma única transferência."""
+    """Worker thread: Responsible for managing the entire lifecycle of a single transfer."""
     print(f"[*] Thread started for {client_address} (File: {filename})")
 
     session_id = str(uuid.uuid4())
@@ -132,7 +132,7 @@ def handle_file_transfer(filename, client_address, packet_queue):
         print(f"[*] Thread for {client_address} shut down.")
 
 def start_udp_server():
-    """Loop principal (Dispatcher): Escuta a porta UDP e roteia pacotes."""
+    """Main loop (Dispatcher): Listens on the UDP port and routes packets."""
     print(f"[*] Threaded UDP Server ready at: {SERVER_IP}:{SERVER_PORT}")
     while True:
         try:
